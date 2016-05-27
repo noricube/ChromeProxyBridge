@@ -10,7 +10,16 @@ namespace ChromeProxyBridge
     {
         static void Main(string[] args)
         {
-            var proxy = new ProxyServer(58080);
+            int port = 58080;
+
+            if ( args.Length > 0)
+            {
+                port = int.Parse(args[0]);
+            }
+
+            var proxy = new ProxyServer(port);
+            Console.WriteLine("init server on {0}", port);
+
             proxy.Run();
         }
     }
