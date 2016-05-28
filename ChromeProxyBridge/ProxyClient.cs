@@ -57,6 +57,7 @@ namespace ChromeProxyBridge
                 if (bytes == 0) // disconnected
                 {
                     Cleanup();
+                    return;
                 }
 
                 requestBuf = new byte[bytes];
@@ -251,6 +252,7 @@ namespace ChromeProxyBridge
                 if (e.BytesTransferred == 0)
                 {
                     Cleanup();
+                    return;
                 }
                 Client.Send(e.Buffer, e.BytesTransferred, SocketFlags.None);
 
@@ -273,6 +275,7 @@ namespace ChromeProxyBridge
                 if (e.BytesTransferred == 0)
                 {
                     Cleanup();
+                    return;
                 }
                 GoogleProxy.Send(e.Buffer, e.BytesTransferred, SocketFlags.None);
 
