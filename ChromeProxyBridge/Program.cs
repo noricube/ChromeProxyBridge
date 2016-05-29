@@ -21,6 +21,13 @@ namespace ChromeProxyBridge
             Console.WriteLine("init server on {0}", port);
 
             proxy.Run();
+
+            while (true)
+            {
+                Console.WriteLine("Active connections: {0}", proxy.ClientCount);
+
+                System.Threading.Thread.Sleep(1000);
+            }
         }
     }
 }

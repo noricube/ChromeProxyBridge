@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -19,14 +20,22 @@ namespace ChromeProxyBridge
             SOCKS4a,
             SOCKS5
         };
+        private bool Closed = false;
+
+
 
         public Socket Client { get; }
         public Socket GoogleProxy { get; set; }
 
-        public ProxyClient(Socket client)
+        public ProxyServer Server { get; set; }
+        public ProxyClient(Socket client, ProxyServer server)
         {
             Client = client;
+            Server = server;
+
+            Closed = false;
         }
+
 
         public void StartWorkerThread()
         {
@@ -43,6 +52,7 @@ namespace ChromeProxyBridge
         {
             try
             {
+                Console.WriteLine("[" + Client.GetHashCode() + "] open");
                 ClientType clientType = ClientType.SOCKS4;
 
                 byte[] buffer = new byte[8196];
@@ -56,7 +66,7 @@ namespace ChromeProxyBridge
                 int bytes = Client.Receive(buffer, 0, buffer.Length, SocketFlags.None);
                 if (bytes == 0) // disconnected
                 {
-                    Cleanup();
+                    Cleanup(true);
                     return;
                 }
 
@@ -123,7 +133,7 @@ namespace ChromeProxyBridge
                     bytes = Client.Receive(buffer, 0, buffer.Length, SocketFlags.None);
                     if (bytes == 0)
                     {
-                        Cleanup();
+                        Cleanup(false);
                         return;
                     }
 
@@ -153,17 +163,15 @@ namespace ChromeProxyBridge
                 }
 
                 string requestHeader = CreateRequestHeader(host, port);
-                Console.WriteLine("[CONNECT] " + host + ":" + port);
+                Console.WriteLine("[" + Client.GetHashCode() + "] " + host + ":" + port);
 
 
                 GoogleProxy = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                GoogleProxy.Connect("ssl.googlezip.net", 443);
 
+                GoogleProxy.Connect("ssl.googlezip.net", 443);
                 GoogleProxy.Send(Encoding.UTF8.GetBytes(requestHeader));
 
                 int recv = GoogleProxy.Receive(buffer, buffer.Length, SocketFlags.None);
-
-
 
                 var responseHeader = Encoding.UTF8.GetString(buffer, 0, recv);
                 if (responseHeader.IndexOf("200") == -1)
@@ -174,9 +182,11 @@ namespace ChromeProxyBridge
                     }
                     else
                     {
-                        Client.Send(new byte[] { 0x05, 0x03, 0, 0, 0, 0, 0, 0 });
+                        requestBuf[1] = 0x05;
+                        Client.Send(requestBuf);
                     }
-                    Client.Close(10);
+
+                    Cleanup(false);
                     return;
                 }
 
@@ -203,7 +213,7 @@ namespace ChromeProxyBridge
             {
                 Console.WriteLine(e.Message);
                 Console.WriteLine(e.StackTrace);
-                Cleanup();
+                Cleanup(true);
             }
         }
 
@@ -251,10 +261,17 @@ namespace ChromeProxyBridge
             {
                 if (e.BytesTransferred == 0)
                 {
-                    Cleanup();
+                    Cleanup(false);
                     return;
                 }
-                Client.Send(e.Buffer, e.BytesTransferred, SocketFlags.None);
+
+                int sentBytes = 0;
+
+                while (sentBytes < e.BytesTransferred)
+                {
+                    int bytes = Client.Send(e.Buffer, sentBytes, e.BytesTransferred - sentBytes, SocketFlags.None);
+                    sentBytes += bytes;
+                }
 
                 e.SetBuffer(new byte[8196], 0, 8196);
                 if (GoogleProxy.ReceiveAsync(e) == false)
@@ -264,7 +281,7 @@ namespace ChromeProxyBridge
             }
             catch (Exception)
             {
-                Cleanup();
+                Cleanup(true);
             }
         }
 
@@ -274,10 +291,17 @@ namespace ChromeProxyBridge
             {
                 if (e.BytesTransferred == 0)
                 {
-                    Cleanup();
+                    Cleanup(true);
                     return;
                 }
-                GoogleProxy.Send(e.Buffer, e.BytesTransferred, SocketFlags.None);
+
+                int sentBytes = 0;
+
+                while (sentBytes < e.BytesTransferred)
+                {
+                    int bytes = GoogleProxy.Send(e.Buffer, sentBytes, e.BytesTransferred - sentBytes, SocketFlags.None);
+                    sentBytes += bytes;
+                }
 
                 e.SetBuffer(new byte[8196], 0, 8196);
                 if (Client.ReceiveAsync(e) == false)
@@ -287,18 +311,30 @@ namespace ChromeProxyBridge
             }
             catch (Exception)
             {
-                Cleanup();
+                Cleanup(false);
             }
         }
 
-        private void Cleanup()
+        private void Cleanup(bool fromClient = false)
         {
-            //Console.WriteLine("disconnect ");
-            Client.Close(10);
-
-            if (GoogleProxy != null)
+            lock (this)
             {
-                GoogleProxy.Close(10);
+                if (Closed == false)
+                {
+                    Closed = true;
+
+                    Console.WriteLine("[" + Client.GetHashCode() + "] disconnect from " + ((fromClient) ? "client" : "google"));
+
+                    Client.Close(10);
+
+                    if (GoogleProxy != null)
+                    {
+                        GoogleProxy.Close(10);
+                    }
+
+                    Server.Disconnect(this);
+
+                }
             }
         }
     }

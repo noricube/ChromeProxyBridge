@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ChromeProxyBridge
@@ -10,24 +11,58 @@ namespace ChromeProxyBridge
     class ProxyServer
     {
         public int Port { get; }
-        public TcpListener Listener { get; set; }
+        public Socket Listener { get; set; }
+
+        public List<ProxyClient> Clients = new List<ProxyClient>();
+        public int ClientCount
+        {
+            get
+            {
+                return Clients.Count;
+            }
+        }
 
         public ProxyServer(int port)
         {
             Port = port;
-            Listener = new TcpListener(new System.Net.IPEndPoint(System.Net.IPAddress.Any, Port));
+            Listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            Listener.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Any, Port));
+            Listener.Listen(1000);
+
+        }
+
+        private void OnAccept(object sender, SocketAsyncEventArgs e)
+        {
+            var clientSocket = e.AcceptSocket;
+            var handler = new ProxyClient(clientSocket, this);
+            handler.StartWorkerThread();
+
+            lock (Clients)
+            {
+                Clients.Add(handler);
+            }
+
+            e.AcceptSocket = null;
+            Listener.AcceptAsync(e);
 
         }
 
         public void Run()
         {
-            Listener.Start(1000);
-
-            while (true)
+            var ev = new SocketAsyncEventArgs();
+            ev.Completed += OnAccept;
+            if (Listener.AcceptAsync(ev) == false)
             {
-                var clientSocket = Listener.AcceptSocket();
-                var handler = new ProxyClient(clientSocket);
-                handler.StartWorkerThread();
+                OnAccept(Listener, ev);
+            }
+
+        }
+
+        public void Disconnect(ProxyClient client)
+        {
+            lock(Clients)
+            {
+                Clients.Remove(client);
             }
         }
     }
