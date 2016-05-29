@@ -243,19 +243,19 @@ namespace ChromeProxyBridge
 
             var ev = new SocketAsyncEventArgs();
             ev.SetBuffer(new byte[8196], 0, 8196);
-            ev.Completed += OnGoogleReceived;
+            ev.Completed += OnReceived;
             if (GoogleProxy.ReceiveAsync(ev) == false)
             {
-                OnGoogleReceived(GoogleProxy, ev);
+                OnReceived(GoogleProxy, ev);
             }
 
             ev = new SocketAsyncEventArgs();
             ev.SetBuffer(new byte[8196], 0, 8196);
-            ev.Completed += OnClientReceived;
+            ev.Completed += OnReceived;
 
             if (Client.ReceiveAsync(ev) == false)
             {
-                OnClientReceived(GoogleProxy, ev);
+                OnReceived(Client, ev);
             }
         }
 
@@ -271,63 +271,56 @@ namespace ChromeProxyBridge
             return requestHeader;
         }
 
-        private void OnGoogleReceived(object sender, SocketAsyncEventArgs e)
+        private void OnReceived(object sender, SocketAsyncEventArgs e)
         {
+            bool isClient = true;
+            Socket connection = sender as Socket;
+            Socket mirror = null;
             try
             {
+                if ( sender == GoogleProxy )
+                {
+                    isClient = true;
+                    mirror = Client;
+                }
+                else
+                {
+                    isClient = false;
+                    mirror = GoogleProxy;
+                }
+
+
+                if ( e.SocketError == SocketError.OperationAborted)
+                {
+                    return;
+                }
+
                 if (e.BytesTransferred == 0)
                 {
                     Cleanup(false);
                     return;
                 }
 
+#if DEBUG
+                Console.WriteLine("{0} {1}", isClient ? ">" : "<", e.BytesTransferred);
+#endif
                 int sentBytes = 0;
 
                 while (sentBytes < e.BytesTransferred)
                 {
-                    int bytes = Client.Send(e.Buffer, sentBytes, e.BytesTransferred - sentBytes, SocketFlags.None);
+                    int bytes = mirror.Send(e.Buffer, sentBytes, e.BytesTransferred - sentBytes, SocketFlags.None);
                     sentBytes += bytes;
                 }
 
                 e.SetBuffer(new byte[8196], 0, 8196);
-                if (GoogleProxy.ReceiveAsync(e) == false)
+                if (connection.ReceiveAsync(e) == false)
                 {
-                    OnGoogleReceived(sender, e);
+                    OnReceived(sender, e);
                 }
             }
             catch (Exception)
             {
-                Cleanup(true);
-            }
-        }
-
-        private void OnClientReceived(object sender, SocketAsyncEventArgs e)
-        {
-            try
-            {
-                if (e.BytesTransferred == 0)
-                {
-                    Cleanup(true);
-                    return;
-                }
-
-                int sentBytes = 0;
-
-                while (sentBytes < e.BytesTransferred)
-                {
-                    int bytes = GoogleProxy.Send(e.Buffer, sentBytes, e.BytesTransferred - sentBytes, SocketFlags.None);
-                    sentBytes += bytes;
-                }
-
-                e.SetBuffer(new byte[8196], 0, 8196);
-                if (Client.ReceiveAsync(e) == false)
-                {
-                    OnClientReceived(sender, e);
-                }
-            }
-            catch (Exception)
-            {
-                Cleanup(false);
+                Cleanup(isClient);
             }
         }
 
