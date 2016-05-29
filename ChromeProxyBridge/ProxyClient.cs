@@ -13,6 +13,7 @@ namespace ChromeProxyBridge
     {
         const int CR = 13;
         const int LF = 10;
+        const int ProxyConnectionTimeout = 15000;
 
         public enum ClientType
         {
@@ -164,14 +165,29 @@ namespace ChromeProxyBridge
 
                 string requestHeader = CreateRequestHeader(host, port);
                 Console.WriteLine("[" + Client.GetHashCode() + "] " + host + ":" + port);
-
+                
 
                 GoogleProxy = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-
+                
                 GoogleProxy.Connect("ssl.googlezip.net", 443);
                 GoogleProxy.Send(Encoding.UTF8.GetBytes(requestHeader));
 
-                int recv = GoogleProxy.Receive(buffer, buffer.Length, SocketFlags.None);
+                GoogleProxy.ReceiveTimeout = ProxyConnectionTimeout;
+
+                int recv = 0;
+                try
+                {
+                    recv = GoogleProxy.Receive(buffer, buffer.Length, SocketFlags.None);
+                }
+                catch(SocketException e)
+                {
+                    // Timeout이 아닌경우 더 윗단으로 전달
+                    // Timeout인 경우 아래 함수에서 자연스럽게 connection fail 발생
+                    if ( e.SocketErrorCode != SocketError.TimedOut)
+                    {
+                        throw e;
+                    }
+                }
 
                 var responseHeader = Encoding.UTF8.GetString(buffer, 0, recv);
                 if (responseHeader.IndexOf("200") == -1)
