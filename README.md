@@ -13,7 +13,7 @@ Chrome Data Compression Proxy를 사용하는 SOCKS4/5 프록시 서버
 ## 사용법
 
 
-1. 저장소를 Clone 후 컴파일 한다
+1. 프로젝트 [Releases](https://github.com/noricube/ChromeProxyBridge/releases/latest) 페이지에서 파일을 받거나 저장소를 Clone 후 컴파일을 한다
 
 2. 실행파일을 실행한다
  
