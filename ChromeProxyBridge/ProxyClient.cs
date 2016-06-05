@@ -53,7 +53,9 @@ namespace ChromeProxyBridge
         {
             try
             {
-                Console.WriteLine("[" + Client.GetHashCode() + "] open");
+                MainForm.Instance.AddLog("[" + Client.GetHashCode() + "] connected");
+                LogActiveConnections();
+
                 ClientType clientType = ClientType.SOCKS4;
 
                 byte[] buffer = new byte[8196];
@@ -164,7 +166,7 @@ namespace ChromeProxyBridge
                 }
 
                 string requestHeader = CreateRequestHeader(host, port);
-                Console.WriteLine("[" + Client.GetHashCode() + "] " + host + ":" + port);
+                MainForm.Instance.AddLog("[" + Client.GetHashCode() + "] " + host + ":" + port);
                 
 
                 GoogleProxy = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -227,8 +229,8 @@ namespace ChromeProxyBridge
 
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
-                Console.WriteLine(e.StackTrace);
+                MainForm.Instance.AddLog(e.Message);
+                MainForm.Instance.AddLog(e.StackTrace);
                 Cleanup(true);
             }
         }
@@ -302,7 +304,7 @@ namespace ChromeProxyBridge
                 }
 
 #if DEBUG
-                Console.WriteLine("{0} {1}", isClient ? ">" : "<", e.BytesTransferred);
+                MainForm.Instance.AddLog(string.Format("{0} {1}", isClient ? ">" : "<", e.BytesTransferred));
 #endif
                 int sentBytes = 0;
 
@@ -332,7 +334,8 @@ namespace ChromeProxyBridge
                 {
                     Closed = true;
 
-                    Console.WriteLine("[" + Client.GetHashCode() + "] disconnect from " + ((fromClient) ? "client" : "google"));
+                    MainForm.Instance.AddLog("[" + Client.GetHashCode() + "] disconnect from " + ((fromClient) ? "client" : "google"));
+                    LogActiveConnections();
 
                     Client.Close(10);
 
@@ -345,6 +348,11 @@ namespace ChromeProxyBridge
 
                 }
             }
+        }
+
+        private void LogActiveConnections()
+        {
+            MainForm.Instance.AddLog(string.Format("Active Connections: {0}", Server.ClientCount));
         }
     }
 }

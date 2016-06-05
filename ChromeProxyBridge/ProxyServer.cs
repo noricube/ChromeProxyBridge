@@ -33,6 +33,11 @@ namespace ChromeProxyBridge
 
         private void OnAccept(object sender, SocketAsyncEventArgs e)
         {
+            if ( e.SocketError != SocketError.Success)
+            {
+                // 소켓 에러 발생시 더 이상 listen 하지 않음
+                return;
+            }
             var clientSocket = e.AcceptSocket;
             var handler = new ProxyClient(clientSocket, this);
             handler.StartWorkerThread();
@@ -64,6 +69,11 @@ namespace ChromeProxyBridge
             {
                 Clients.Remove(client);
             }
+        }
+
+        public void Stop()
+        {
+            Listener.Close();
         }
     }
 }
